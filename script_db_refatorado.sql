@@ -3,11 +3,8 @@
 -- Versão 2: suporte multi-tenant (várias instituições) e múltiplos
 -- níveis de ensino (Fundamental, Médio, Técnico, Superior)
 -- =====================================================================
-
-CREATE DATABASE moblixdb;
-
-USE moblixdb;
-
+CREATE DATABASE techdesign_moblix;
+USE techdesign_moblix;
 -- ---------------------------------------------------------------------
 -- TABELA: instituicoes
 -- Representa cada escola/faculdade que usa o sistema (multi-tenant).

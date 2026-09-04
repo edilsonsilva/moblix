@@ -1,0 +1,81 @@
+Perfeito, essa combinação faz todo sentido: multi-tenant com uma tabela turmas genérica cobrindo todos os níveis. Vou reestruturar o script com base nisso.
+
+Principais mudanças que vou aplicar:
+
+Nova tabela instituicoes — cada escola/faculdade é um "tenant" isolado.
+usuarios ganha instituicao_id — vincula cada usuário à sua instituição (nullável, para permitir um perfil "Super Administrador" que enxerga todas).
+cursos → turmas — tabela genérica com campo nivel_ensino (Fundamental I/II, Médio, Técnico, Superior), servindo tanto para "6º Ano A" quanto para "Engenharia - 3º Semestre".
+locais ganha instituicao_id.
+patrimonios ganha instituicao_id (isolamento do bem por escola) e troca curso_id por turma_id.
+categorias mantida global (compartilhada entre instituições) — ex: "Mobiliário", "Informática" servem para todas. Posso mudar se preferir categorias próprias por instituição.
+Índices em instituicao_id nas tabelas principais, para performance em consultas multi-tenant.
+Chaves estrangeiras para instituicoes usando ON DELETE RESTRICT (evita apagar uma instituição inteira com patrimônio ativo por engano — a exclusão deve ser feita via campo ativo).
+
+Vou gerar o script completo agora.
+
+Criou um arquivo, executou um comando, leu um arquivo
+
+Alguns pontos que vale ficar de olho ao migrar dados existentes:
+
+numero_tombamento deixou de ser UNIQUE global e virou único por instituição (uk_tombamento_instituicao), já que escolas diferentes podem usar a mesma numeração internamente.
+categorias continua global — se no futuro alguma instituição quiser categorias exclusivas, dá para adicionar um instituicao_id nullable nela sem quebrar nada.
+A regra de que um usuario (exceto Super Administrador) deve ter instituicao_id preenchido precisa ser validada na aplicação, já que MySQL/MariaDB não suportam bem CHECK condicional entre colunas dependendo do valor de outra.
+
+Quer que eu também gere os INSERTs de exemplo (seed) ou algum script de migração dos dados que você já tem no banco antigo?
+
+
+Criei os dados de exemplo cobrindo as 4 instituições (fundamental, médio, técnico e faculdade), com usuários (incluindo um Super Administrador), turmas específicas de cada nível, locais, categorias globais, patrimônios, movimentações e uma baixa patrimonial.
+
+Alguns pontos importantes:
+
+O script assume que as tabelas estão vazias (AUTO_INCREMENT começando do 1) — os comentários indicam os IDs gerados em cada bloco, para você conseguir rastrear as referências.
+Os numero_tombamento usam prefixos por instituição (ML-, RB-, INT-, UNI-) para ficar claro visualmente qual escola é dona do bem.
+As senhas estão como placeholders de hash — troque pelos hashes reais (bcrypt/argon2) gerados pela sua aplicação antes de usar em produção.
+
+Quer que eu gere também algumas views (ex: patrimônio consolidado por instituição, itens em atraso de devolução) ou stored procedures para operações comuns, tipo registrar empréstimo/devolução?
+
+
+############################### FRONT END ##################################
+
+Boa! Rsrs, seja bem-vindo de volta. Com base no banco que já montamos, dá pra pensar as funcionalidades em blocos. Vou organizar por área:
+
+1. Autenticação e controle de acesso
+Login com e-mail/senha (hash já previsto no schema)
+Permissões por perfil: Super Administrador (vê todas as instituições), Administrador (gerencia a própria instituição), Coordenador (gerencia turmas/locais), Assistente (operações do dia a dia, sem exclusões)
+Troca de senha, recuperação por e-mail
+Log de auditoria (quem criou/alterou o quê — já dá pra aproveitar os campos criado_por/atualizado_por)
+2. Gestão de instituições (só Super Admin)
+Cadastrar, editar, ativar/desativar instituições
+Dashboard consolidado comparando patrimônio entre instituições
+3. Cadastros básicos
+CRUD de turmas (com filtro por nível de ensino)
+CRUD de locais
+CRUD de categorias
+CRUD de usuários dentro da própria instituição
+4. Gestão de patrimônio (núcleo do sistema)
+Cadastro de bem com upload de foto e geração automática/manual do número de tombamento
+Geração de etiqueta com QR Code ou código de barras para colar no bem físico
+Consulta rápida escaneando o QR Code (abre a ficha do item no celular)
+Edição, histórico de alterações, status atual
+Filtros avançados: por local, turma, categoria, status, faixa de valor, data de aquisição
+5. Movimentações (empréstimo, devolução, manutenção, transferência)
+Registrar empréstimo com responsável e data prevista de devolução
+Alertas automáticos de itens em atraso
+Registrar devolução (baixa automática do status "Emprestado")
+Enviar/retornar de manutenção
+Transferência entre locais/turmas com histórico
+6. Baixa patrimonial
+Fluxo de solicitação → aprovação → baixa efetiva (workflow, já que hoje é direto)
+Anexar documento comprobatório (upload de PDF/imagem do B.O., termo, recibo)
+7. Relatórios e dashboards
+Inventário geral e por local/turma
+Valor total do patrimônio (ativo vs. baixado)
+Itens mais movimentados
+Relatório de depreciação (útil pra faculdade/prestação de contas)
+Exportação em PDF/Excel
+8. Inventário físico (conferência)
+Modo "conferência": gerar lista de bens esperados por local e marcar o que foi encontrado/não encontrado (bipando o QR Code)
+Apontar divergências automaticamente
+9. Notificações
+E-mail/push quando: empréstimo vence, manutenção demora além do previsto, bem é baixado
+Notificação ao coordenador quando um bem novo é vinculado à sua turma
